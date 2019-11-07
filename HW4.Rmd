@@ -93,6 +93,11 @@ BreastCancer_num[is.na(BreastCancer_num)] = 0
 control = rfeControl(functions = caretFuncs, number = 2)
 
 # run the RFE algorithm
+# x = features
+# y = something variables
+# # of variables you want; here we try 2, 5, and 9 numbers
+# trying with 2, 5, 7, and 9, we get different results
+# if we plot, we see that 5 and 7 perform the best
 results = rfe(BreastCancer_num[,1:10], BreastCancer_num[,11], sizes = c(2,5,9), rfeControl = control, method = "svmRadial")
 
 results
@@ -108,7 +113,7 @@ Least Absolute Shrinkage and Selection Operator (LASSO) regression
 set.seed(24)
 
 #convert data
-x = x <- as.matrix(BreastCancer_num[,1:10])
+x = as.matrix(BreastCancer_num[,1:10])
 y = as.double(as.matrix(ifelse(BreastCancer_num[,11]=='benign', 0, 1))) 
 
 #fit Lasso model 
@@ -150,10 +155,12 @@ BreastCancer_num[is.na(BreastCancer_num)] = 0
 train_classification <- BreastCancer_num[train_pos, ]
 test_classification <- BreastCancer_num[-train_pos, ]
 
-#fit a model
+#fit a model with random forest
 rfmodel = randomForest(Class ~ Id + Cl.thickness + Cell.size + Cell.shape + Marg.adhesion + Epith.c.size + Bare.nuclei + Bl.cromatin + Normal.nucleoli +  Mitoses, data=train_classification,  importance = TRUE, oob.times = 15, confusion = TRUE)
 
-#rank features based on importance 
+#rank features based on importance
+#meandecreaseaccuracy is stats count when exclude
+#small values in the 2 rightmost columns can be tossed out.
 importance(rfmodel)
 
 ```
@@ -164,6 +171,80 @@ importance(rfmodel)
 
 1. Compare the most important features from at least 2 different classes of feature selection methods covered in this tutorial with any reasonable machine learning dataset from mlbench. Do these feature selection methods provide similar results? 
 
+```{r}
+# I used the iris dataset from mlbench.
+data(iris)
+iris_num = transform(iris, Sepal.Length = as.numeric(Sepal.Length), 
+                         Sepal.Width = as.numeric(Sepal.Width),
+                         Petal.Length = as.numeric(Petal.Length),
+                         Petal.Width = as.numeric(Petal.Width))
+
+iris_num[is.na(iris_num)] = 0
+
+# I used RFE and Random Forest from the lab.
+
+############### RFE ###############
+# Define the control
+set.seed(1117)
+control = rfeControl(functions = caretFuncs, number = 2)
+
+# Run the RFE algorithm
+results = rfe(iris_num[,1:4], iris_num[,5], sizes = c(1:4), rfeControl = control, method = "svmRadial")
+
+# View results
+results
+results$variables
+
+########## Random Forest ##########
+# Set up train/test sets
+train_size <- floor(0.75 * nrow(iris))
+set.seed(1117)
+train_pos <- sample(seq_len(nrow(iris)), size = train_size)
+
+train_classification <- iris_num[train_pos, ]
+test_classification <- iris_num[-train_pos, ]
+
+# Run random forest algorithm
+rfmodel = randomForest(Species ~ Sepal.Length + Sepal.Width + Petal.Length + Petal.Width, data=train_classification,  importance = TRUE, oob.times = 15, confusion = TRUE)
+
+# View results
+importance(rfmodel)
+
+############ Analysis #############
+# For RFE, Petal.Length and Petal.Width had the highest scores in the MeanDecreaseAccuracy and MeanDecreaseGini columns. We would most likely pick these attributes as features.
+# For Random Forest the highest accuracy (0.9907) was achieved with 2 variables. If we look into results$variables, we see that these two variables are Petal.Length and Petal.Width.
+# These results are in line with one another.
+```
+
+
 2. Attempt a feature selection method not covered in this tutorial (backward elimination, forward propogation, etc.)
 
+```{r}
+# Backward Elimination
+# Turn Species column into numeric.
+  # 1 = Setosa
+  # 2 = Versicolor
+  # 3 = Virginica
+iris_num = transform(iris, Species = as.numeric(factor(iris$Species)))
+
+# Make linear model to predict species based on all variables.
+lm_allvars <- lm(Species ~ .,data=iris_num)
+
+# In backward elimination, all variables are in the model to start. As the algorithm runs, variables are removed.
+# The lower the AIC, the better. We start with AIC=-450.56.
+# The following table tells us the resulting AIC if a variable is removed.
+# The <none> row refers to what would happen if we didn't remove any variable.
+# The AIC column is ranked from least to greatest, so we want to remove the first variable at each step for the lowest (best) AIC.
+# We remove variables one-by-one because interactions can change as variables are removed.
+  # This isn't entirely evident because there is only one variable above <none>.
+# The algorithm stops running once <none> is in the first row (because that means removing no variable would result in the lowest AIC).
+step(lm_allvars, direction="backward")
+
+# In summary, our backward elimination algorithm suggests that Sepal.Length, Petal.Length, and Petal.Width are the best variables for predicting species.
+lm_belim <- lm(Species ~ Sepal.Length + Petal.Length + Petal.Width,data=iris_num)
+
+# When we view results, we see that our p-value has improved from 4.15e-08 to 2.72e-08.
+summary(lm_allvars)
+summary(lm_belim)
+```
 
